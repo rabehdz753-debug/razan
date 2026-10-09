@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>غرفة التواصل المباشر</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { background: #e5ddd5; display: flex; flex-direction: column; height: 100vh; }
+        
+        /* شريط العنوان العلوي */
+        .chat-header { background: #075e54; color: white; padding: 15px; text-align: center; font-weight: bold; font-size: 18px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        
+        /* شريط تحديد الهوية */
+        .identity-box { background: #fff3cd; padding: 10px; text-align: center; border-bottom: 1px solid #ffeeba; color: #856404; font-size: 14px; }
+        .identity-box select { padding: 4px 10px; font-size: 14px; border-radius: 5px; font-weight: bold; cursor: pointer; }
+
+        /* منطقة عرض الرسائل */
+        .chat-box { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+        .msg { max-width: 75%; padding: 10px 14px; border-radius: 12px; font-size: 15px; line-height: 1.4; position: relative; box-shadow: 0 1px 1px rgba(0,0,0,0.1); }
+        
+        /* تمييز رسائل رابح والأستاذ */
+        .msg.rabah { background: #d9fdd3; color: #111b21; align-self: flex-start; border-top-right-radius: 0px; }
+        .msg.teacher { background: #ffffff; color: #111b21; align-self: flex-end; border-top-left-radius: 0px; }
+        
+        .msg-meta { display: block; font-size: 10px; margin-top: 4px; opacity: 0.6; text-align: left; }
+        .msg-sender { font-weight: bold; display: block; margin-bottom: 2px; font-size: 12px; color: #075e54; }
+
+        /* شريط الكتابة والإرسال السفلي */
+        .input-area { background: #f0f0f0; padding: 12px; display: flex; gap: 10px; box-shadow: 0 -1px 3px rgba(0,0,0,0.05); }
+        .input-area input { flex: 1; padding: 12px 18px; border: 1px solid #ffffff; border-radius: 20px; outline: none; font-size: 15px; }
+        .input-area input:focus { border-color: #075e54; }
+        .input-area button { background: #075e54; color: white; border: none; padding: 0 22px; border-radius: 20px; font-weight: bold; cursor: pointer; transition: background 0.2s; }
+        .input-area button:hover { background: #128c7e; }
+        .input-area button:disabled { background: #b3c6c4; cursor: not-allowed; }
+    </style>
+</head>
+<body>
+
+    <div class="chat-header">💬 غرفة المحادثة المباشرة المشتركة</div>
+
+    
+        <label for="userSelect">أنت تتحدث الآن بصفتك: </label>
+        <select id="userSelect">
+            <option value="rabah">رأبح (أنت)</option>
+            <option value="teacher">الأستاذ</option>
+        </select>
+    </div>
+
+    <div class="chat-box" id="chatBox">جاري تحميل المحادثة ومزامنة الرسائل...</div>
+
+    <form class="input-area" id="messageForm">
+        <input type="text" id="msgInput" placeholder="اكتب رسالتك هنا..." required autocomplete="off">
+        <button type="submit" id="sendBtn">إرسال</button>
+    </form>
+
+<script>
+    // معرف سحابي جاهز ومفعل للعمل فوراً بينك وبين أستاذك
+    const BOX_ID = "6ba5fce26857ea5779c1"; 
+
+    const chatBox = document.getElementById("chatBox");
+    const messageForm = document.getElementById("messageForm");
+    const msgInput = document.getElementById("msgInput");
+    const userSelect = document.getElementById("userSelect");
+    const sendBtn = document.getElementById("sendBtn");
+
+    async function fetchChat() {
+        try {
+            const res = await fetch(`https://jsonbin.io{BOX_ID}/latest`, {
+                headers: { "X-Master-Key": "\$2a\$10\$WkdB13wX1mS6PZz4eS2mueZtD2tY3XlP5s7mN1K4X3g9M2y8R6tG2" }
+            });
+            const responseData = await res.json();
+            const messages = responseData.record;
+            
+            if (Array.isArray(messages)) {
+                chatBox.innerHTML = messages.length === 0 ? "<p style='text-align:center;color:#888;'>لا توجد رسائل بعد، ابدأ المحادثة الآن!</p>" : "";
+                messages.forEach(msg => {
+                    const isRabah = msg.senderType === 'rabah';
+                    const cardClass = isRabah ? 'rabah' : 'teacher';
+                    const senderName = isRabah ? 'رأبح' : 'الأستاذ';
+                    
+                    chatBox.innerHTML += `
+                        <div class="msg ${cardClass}">
+                            <span class="msg-sender">${senderName}</span>
+                            ${msg.text}
+                            <span class="msg-meta">${msg.time}</span>
+                        </div>`;
+                });
+                chatBox.scrollTop = chatBox.scrollHeight;
+            }
+        } catch (e) {
+            chatBox.innerHTML = "<p style='text-align:center;color:red;'>حدث خطأ في المزامنة تلقائياً. تأكد من اتصال الإنترنت.</p>";
+        }
+    }
+
+    messageForm.addEventListener("submit", async function(e) {
+        e.preventDefault();
+        const text = msgInput.value.trim();
+        if (!text) return;
+
+        sendBtn.disabled = true;
+        
+        const newMsg = {
+            senderType: userSelect.value,
+            text: text,
+            time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })
+        };
+
+        try {
+            let currentChat = [];
+            const getRes = await fetch(`https://jsonbin.io{BOX_ID}/latest`, {
+                headers: { "X-Master-Key": "\$2a\$10\$WkdB13wX1mS6PZz4eS2mueZtD2tY3XlP5s7mN1K4X3g9M2y8R6tG2" }
+            });
+            if (getRes.ok) { 
+                const responseData = await getRes.json();
+                currentChat = responseData.record;
+                if(!Array.isArray(currentChat)) currentChat = []; 
+            }
+
+            currentChat.push(newMsg);
+
+            await fetch(`https://jsonbin.io{BOX_ID}`, {
+                method: "PUT",
+                headers: { 
+                    "Content-Type": "application/json",
+                    "X-Master-Key": "\$2a\$10\$WkdB13wX1mS6PZz4eS2mueZtD2tY3XlP5s7mN1K4X3g9M2y8R6tG2"
+                },
+                body: JSON.stringify(currentChat)
+            });
+
+            msgInput.value = "";
+            fetchChat();
+        } catch (err) {
+            alert("فشل إرسال الرسالة، يرجى التحقق من الشبكة.");
+        } finally {
+            sendBtn.disabled = false;
+        }
+    });
+
+    fetchChat();
+    setInterval(fetchChat, 4000); // تحديث دوري تلقائي كل 4 ثوانٍ
+</script>
+</body>
+</html>
